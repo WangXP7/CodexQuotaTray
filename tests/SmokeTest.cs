@@ -32,6 +32,7 @@ namespace CodexQuotaTray.Tests
                 TestLiveAppServer();
                 TestIconHandles();
                 TestSquareIconShape();
+                TestTwoDigitReadability();
 
                 QuotaSnapshot snapshot = SessionLogQuotaProvider.ReadLatest();
                 if (snapshot == null)
@@ -166,10 +167,55 @@ namespace CodexQuotaTray.Tests
             Console.WriteLine("ICON_SHAPE=rounded-square");
         }
 
+        private static void TestTwoDigitReadability()
+        {
+            int[] values = new int[] { 11, 42, 88, 99 };
+            foreach (int value in values)
+            {
+                int minX = 16;
+                int minY = 16;
+                int maxX = -1;
+                int maxY = -1;
+                using (Icon icon = IconRenderer.Create(value, false))
+                using (Bitmap bitmap = icon.ToBitmap())
+                {
+                    for (int y = 0; y < bitmap.Height; y++)
+                    {
+                        for (int x = 0; x < bitmap.Width; x++)
+                        {
+                            Color pixel = bitmap.GetPixel(x, y);
+                            if (pixel.A > 100 && pixel.R > 205 && pixel.G > 205 && pixel.B > 205)
+                            {
+                                minX = Math.Min(minX, x);
+                                minY = Math.Min(minY, y);
+                                maxX = Math.Max(maxX, x);
+                                maxY = Math.Max(maxY, y);
+                            }
+                        }
+                    }
+                }
+
+                Console.WriteLine(
+                    "ICON_TEXT_BOUNDS=" + value.ToString() + ":" +
+                    minX.ToString() + "," + minY.ToString() + "-" +
+                    maxX.ToString() + "," + maxY.ToString());
+
+                if (minX < 1 || maxX > 14 || maxX - minX + 1 < 10 || maxY - minY + 1 < 8)
+                {
+                    throw new InvalidOperationException(
+                        "Two-digit icon text is clipped or too small for " + value.ToString() +
+                        ": bounds=" + minX.ToString() + "," + minY.ToString() + "-" +
+                        maxX.ToString() + "," + maxY.ToString());
+                }
+            }
+
+            Console.WriteLine("ICON_TWO_DIGIT_READABILITY=ok");
+        }
+
         private static void RenderIconPreview(string outputPath)
         {
-            int?[] values = new int?[] { 88, 42, 9, null };
-            string[] labels = new string[] { "88", "42", "9", "?" };
+            int?[] values = new int?[] { 11, 42, 88, 99 };
+            string[] labels = new string[] { "11", "42", "88", "99" };
             using (Bitmap canvas = new Bitmap(480, 178))
             using (Graphics graphics = Graphics.FromImage(canvas))
             using (Font labelFont = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point))

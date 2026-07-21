@@ -19,7 +19,7 @@ namespace CodexQuotaTray
                 graphics.SmoothingMode = SmoothingMode.HighQuality;
                 graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 graphics.CompositingQuality = CompositingQuality.HighQuality;
-                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 graphics.Clear(Color.Transparent);
 
                 Color fill = GetColor(remainingPercent, unlimited);
@@ -31,7 +31,7 @@ namespace CodexQuotaTray
                 }
 
                 string text;
-                string fontName = "Bahnschrift SemiCondensed";
+                string fontName = "Microsoft YaHei UI";
                 if (unlimited)
                 {
                     text = "\u221E";
@@ -51,10 +51,7 @@ namespace CodexQuotaTray
                     text = remainingPercent.Value.ToString();
                 }
 
-                float maximumWidth = text.Length >= 2 ? 14.5f : 13.5f;
-                float maximumHeight = 14.5f;
-                float fontSize = FindLargestFontSize(
-                    graphics, text, fontName, maximumWidth, maximumHeight);
+                float fontSize = text.Length >= 2 ? 13f : 15f;
 
                 using (Font font = new Font(fontName, fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
                 using (SolidBrush foreground = new SolidBrush(Color.White))
@@ -63,7 +60,7 @@ namespace CodexQuotaTray
                     format.Alignment = StringAlignment.Center;
                     format.LineAlignment = StringAlignment.Center;
                     format.FormatFlags = StringFormatFlags.NoWrap;
-                    graphics.DrawString(text, font, foreground, new RectangleF(0.5f, -0.35f, 15f, 16.35f), format);
+                    graphics.DrawString(text, font, foreground, new Rectangle(1, -1, 16, 18), format);
                 }
 
                 IntPtr handle = bitmap.GetHicon();
@@ -79,32 +76,6 @@ namespace CodexQuotaTray
                     DestroyIcon(handle);
                 }
             }
-        }
-
-        private static float FindLargestFontSize(
-            Graphics graphics,
-            string text,
-            string fontName,
-            float maximumWidth,
-            float maximumHeight)
-        {
-            using (StringFormat format = new StringFormat(StringFormat.GenericTypographic))
-            {
-                format.FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.MeasureTrailingSpaces;
-                for (float size = 15f; size >= 8f; size -= 0.25f)
-                {
-                    using (Font font = new Font(fontName, size, FontStyle.Bold, GraphicsUnit.Pixel))
-                    {
-                        SizeF measured = graphics.MeasureString(text, font, Int32.MaxValue, format);
-                        if (measured.Width <= maximumWidth && measured.Height <= maximumHeight)
-                        {
-                            return size;
-                        }
-                    }
-                }
-            }
-
-            return 8f;
         }
 
         private static GraphicsPath CreateRoundedRectangle(RectangleF bounds, float radius)
