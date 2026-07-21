@@ -24,6 +24,7 @@ namespace CodexQuotaTray
         private QuotaSnapshot _lastSnapshot;
         private string _connectionStatus = "正在启动…";
         private string _lastAlertKey;
+        private DateTime _lastLowQuotaAlertAtUtc = DateTime.MinValue;
         private bool _closing;
 
         public TrayApplicationContext(bool forcePopup)
@@ -314,12 +315,15 @@ namespace CodexQuotaTray
             string resetKey = (snapshot.Primary == null ? "" : snapshot.Primary.ResetsAtUnix.ToString()) + ":" +
                 (snapshot.Secondary == null ? "" : snapshot.Secondary.ResetsAtUnix.ToString());
             string alertKey = resetKey + ":" + threshold.ToString();
-            if (String.Equals(alertKey, _lastAlertKey, StringComparison.Ordinal))
+            DateTime now = DateTime.UtcNow;
+            if (String.Equals(alertKey, _lastAlertKey, StringComparison.Ordinal) ||
+                now - _lastLowQuotaAlertAtUtc < TimeSpan.FromMinutes(10))
             {
                 return;
             }
 
             _lastAlertKey = alertKey;
+            _lastLowQuotaAlertAtUtc = now;
             _notifyIcon.BalloonTipTitle = "Codex 额度提醒";
             _notifyIcon.BalloonTipText = "剩余额度 " + remaining.Value.ToString() + "%";
             _notifyIcon.BalloonTipIcon = ToolTipIcon.Warning;
