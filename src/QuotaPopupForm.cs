@@ -133,9 +133,7 @@ namespace CodexQuotaTray
                 _caption.Text = "当前账户未返回百分比额度";
             }
 
-            _percent.ForeColor = snapshot.IsOlderThan(TimeSpan.FromMinutes(10))
-                ? IconRenderer.GetColor(null, false)
-                : IconRenderer.GetColor(remaining, snapshot.IsUnlimited);
+            _percent.ForeColor = IconRenderer.GetColor(remaining, snapshot.IsUnlimited);
             _plan.Text = String.IsNullOrEmpty(snapshot.PlanType)
                 ? String.Empty
                 : QuotaFormatting.FormatPlan(snapshot.PlanType);

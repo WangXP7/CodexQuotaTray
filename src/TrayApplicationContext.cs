@@ -276,10 +276,9 @@ namespace CodexQuotaTray
 
         private void UpdateIcon(QuotaSnapshot snapshot)
         {
-            bool stale = snapshot.IsOlderThan(TimeSpan.FromMinutes(10));
             Icon nextIcon = IconRenderer.Create(
-                stale ? (int?)null : snapshot.DisplayRemainingPercent,
-                !stale && snapshot.IsUnlimited);
+                snapshot.DisplayRemainingPercent,
+                snapshot.IsUnlimited);
             Icon previous = _currentIcon;
             _currentIcon = nextIcon;
             _notifyIcon.Icon = nextIcon;
