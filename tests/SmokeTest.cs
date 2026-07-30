@@ -33,6 +33,7 @@ namespace CodexQuotaTray.Tests
                 TestIconHandles();
                 TestSquareIconShape();
                 TestTwoDigitReadability();
+                TestDisconnectedIconColors();
                 TestTaskMonitor();
 
                 QuotaSnapshot snapshot = SessionLogQuotaProvider.ReadLatest();
@@ -213,6 +214,46 @@ namespace CodexQuotaTray.Tests
             Console.WriteLine("ICON_TWO_DIGIT_READABILITY=ok");
         }
 
+        private static void TestDisconnectedIconColors()
+        {
+            int[] values = new int[] { 10, 30, 70 };
+            foreach (int value in values)
+            {
+                bool hasBlackText = false;
+                using (Icon icon = IconRenderer.Create(value, false, true))
+                using (Bitmap bitmap = icon.ToBitmap())
+                {
+                    Color expected = IconRenderer.GetColor(value, false);
+                    Color background = bitmap.GetPixel(8, 2);
+                    if (Math.Abs(background.R - expected.R) > 5 ||
+                        Math.Abs(background.G - expected.G) > 5 ||
+                        Math.Abs(background.B - expected.B) > 5)
+                    {
+                        throw new InvalidOperationException("Disconnected icon changed its quota background color.");
+                    }
+
+                    for (int y = 0; y < bitmap.Height; y++)
+                    {
+                        for (int x = 0; x < bitmap.Width; x++)
+                        {
+                            Color pixel = bitmap.GetPixel(x, y);
+                            if (pixel.A > 150 && pixel.R < 50 && pixel.G < 50 && pixel.B < 50)
+                            {
+                                hasBlackText = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!hasBlackText)
+                {
+                    throw new InvalidOperationException("Disconnected icon did not render black digits.");
+                }
+            }
+
+            Console.WriteLine("ICON_DISCONNECTED_COLORS=ok");
+        }
+
         private static void TestTaskMonitor()
         {
             string originalCodexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
@@ -296,7 +337,7 @@ namespace CodexQuotaTray.Tests
                 for (int index = 0; index < values.Length; index++)
                 {
                     int left = 18 + index * 116;
-                    using (Icon icon = IconRenderer.Create(values[index], false))
+                    using (Icon icon = IconRenderer.Create(values[index], false, true))
                     using (Bitmap iconBitmap = icon.ToBitmap())
                     {
                         graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -310,7 +351,7 @@ namespace CodexQuotaTray.Tests
                 }
 
                 graphics.DrawString(
-                    "上：任务栏实际尺寸    下：像素放大预览",
+                    "断线状态：保留红/黄/绿底色，数字改为黑色",
                     labelFont,
                     labelBrush,
                     135,

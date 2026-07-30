@@ -12,6 +12,11 @@ namespace CodexQuotaTray
 
         public static Icon Create(int? remainingPercent, bool unlimited)
         {
+            return Create(remainingPercent, unlimited, false);
+        }
+
+        public static Icon Create(int? remainingPercent, bool unlimited, bool disconnected)
+        {
             const int size = 16;
             using (Bitmap bitmap = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
             using (Graphics graphics = Graphics.FromImage(bitmap))
@@ -54,7 +59,7 @@ namespace CodexQuotaTray
                 float fontSize = text.Length >= 2 ? 13f : 15f;
 
                 using (Font font = new Font(fontName, fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (SolidBrush foreground = new SolidBrush(Color.White))
+                using (SolidBrush foreground = new SolidBrush(disconnected ? Color.Black : Color.White))
                 using (StringFormat format = new StringFormat(StringFormat.GenericTypographic))
                 {
                     format.Alignment = StringAlignment.Center;

@@ -151,6 +151,7 @@ namespace CodexQuotaTray
                 UpdateStatusItem();
                 if (_lastSnapshot != null)
                 {
+                    UpdateIcon(_lastSnapshot);
                     _notifyIcon.Text = BuildTooltip(_lastSnapshot);
                 }
             });
@@ -289,7 +290,10 @@ namespace CodexQuotaTray
         {
             Icon nextIcon = IconRenderer.Create(
                 snapshot.DisplayRemainingPercent,
-                snapshot.IsUnlimited);
+                snapshot.IsUnlimited,
+                snapshot.IsFallback ||
+                snapshot.IsOlderThan(TimeSpan.FromMinutes(10)) ||
+                RealtimeIsUnavailable());
             Icon previous = _currentIcon;
             _currentIcon = nextIcon;
             _notifyIcon.Icon = nextIcon;
