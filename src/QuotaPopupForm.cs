@@ -73,7 +73,7 @@ namespace CodexQuotaTray
             _tasksPanel = new BufferedFlowLayoutPanel();
             _tasksPanel.Location = new Point(14, 286);
             _tasksPanel.Size = new Size(338, 216);
-            _tasksPanel.AutoScroll = true;
+            _tasksPanel.AutoScroll = false;
             _tasksPanel.WrapContents = false;
             _tasksPanel.FlowDirection = FlowDirection.TopDown;
             _tasksPanel.BackColor = Color.FromArgb(31, 35, 41);
@@ -198,6 +198,7 @@ namespace CodexQuotaTray
             }
 
             int count = tasks == null ? 0 : tasks.Count;
+            ResizeTaskArea(count);
             _tasksCount.Text = count <= 1
                 ? count.ToString() + " 个"
                 : count.ToString() + " 个并行";
@@ -206,7 +207,7 @@ namespace CodexQuotaTray
             {
                 Label empty = MakeLabel(
                     "当前没有正在执行的任务",
-                    0, 0, 310, 196, 9f, FontStyle.Regular,
+                    0, 0, 310, _tasksPanel.Height - 8, 9f, FontStyle.Regular,
                     Color.FromArgb(120, 132, 148));
                 empty.TextAlign = ContentAlignment.MiddleCenter;
                 empty.Margin = new Padding(0);
@@ -222,6 +223,30 @@ namespace CodexQuotaTray
             }
 
             _tasksPanel.ResumeLayout();
+        }
+
+        private void ResizeTaskArea(int taskCount)
+        {
+            int oldRight = Right;
+            int oldBottom = Bottom;
+            int panelHeight = taskCount <= 0 ? 112 : 8 + (taskCount * 104);
+            int targetHeight = 286 + panelHeight + 18;
+
+            MinimumSize = Size.Empty;
+            MaximumSize = Size.Empty;
+            _tasksPanel.Height = panelHeight;
+            ClientSize = new Size(366, targetHeight);
+            MinimumSize = ClientSize;
+            MaximumSize = ClientSize;
+
+            if (Visible)
+            {
+                Screen screen = Screen.FromRectangle(new Rectangle(Location, Size));
+                Rectangle area = screen.WorkingArea;
+                int left = Math.Max(area.Left, Math.Min(oldRight - Width, area.Right - Width));
+                int top = Math.Max(area.Top, Math.Min(oldBottom - Height, area.Bottom - Height));
+                Location = new Point(left, top);
+            }
         }
 
         public void ShowNearTaskbar()

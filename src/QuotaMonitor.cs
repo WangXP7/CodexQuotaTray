@@ -133,7 +133,8 @@ namespace CodexQuotaTray
                     serverObservedUtc = _lastServerObservedUtc;
                 }
 
-                if (serverObservedUtc == DateTime.MinValue || snapshot.ObservedAtUtc > serverObservedUtc)
+                if (ShouldEmitFallbackSnapshot(
+                    serverIsFresh, serverObservedUtc, snapshot.ObservedAtUtc))
                 {
                     EmitSnapshot(snapshot);
                     EmitStatus(snapshot.IsOlderThan(TimeSpan.FromMinutes(10))
@@ -151,6 +152,15 @@ namespace CodexQuotaTray
             }
         }
 
+        internal static bool ShouldEmitFallbackSnapshot(
+            bool serverIsFresh,
+            DateTime serverObservedUtc,
+            DateTime fallbackObservedUtc)
+        {
+            return !serverIsFresh &&
+                (serverObservedUtc == DateTime.MinValue || fallbackObservedUtc > serverObservedUtc);
+        }
+
         private void OnServerSnapshot(QuotaSnapshot snapshot)
         {
             lock (_stateLock)
@@ -159,6 +169,7 @@ namespace CodexQuotaTray
                 _lastServerObservedUtc = snapshot.ObservedAtUtc;
             }
 
+            EmitStatus("实时额度已更新");
             EmitSnapshot(snapshot);
         }
 

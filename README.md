@@ -29,9 +29,9 @@ Windows 可能会先把新图标放进托盘折叠区。可以将图标拖到任
 
 程序优先短时连接本机 Codex 自带的 App Server，通过官方 `account/rateLimits/read` 方法读取额度，每 60 秒主动校验一次；查询完成即释放子进程。Codex 会话文件有新事件时会立即触发本地刷新，因此平时不需要常驻额外的 Codex 服务进程。
 
-实时接口暂不可用时，程序只解析 `%CODEX_HOME%\sessions` 中 Codex 已写入的最新 `token_count.rate_limits` 事件作为降级缓存。托盘继续显示最近有效数字和原有红/黄/绿底色，并用黑色数字表示当前不是实时数据。程序不会读取、复制或保存 `auth.json` 中的登录令牌，也不会直接调用私有网页接口。
+实时接口暂不可用时，程序只解析 `%CODEX_HOME%\sessions` 中 Codex 已写入的最新 `token_count.rate_limits` 事件作为降级缓存。托盘继续显示最近有效数字和原有红/黄/绿底色，并用黑色数字表示当前不是实时数据；连接恢复并获得实时快照后会自动恢复白色，本地缓存不会覆盖新鲜的实时快照。程序不会读取、复制或保存 `auth.json` 中的登录令牌，也不会直接调用私有网页接口。
 
-任务区域同样只读取本机 Codex 会话日志中的 `task_started`、`task_complete`、用户任务文本、公开进度消息和工具活动。进度百分比与剩余时间根据已执行时长动态估算，不是 Codex 服务端给出的承诺值。
+任务区域同样只读取本机 Codex 会话日志中的 `task_started`、`task_complete`、用户任务文本、公开进度消息和工具活动。并行任务增加时卡片会自动变高并完整显示所有任务，不出现滚动条。进度百分比与剩余时间根据已执行时长动态估算，不是 Codex 服务端给出的承诺值。
 
 “剩余百分比”按 `100 - usedPercent` 计算。Codex 的实际消耗会随任务复杂度、模型和运行位置变化；账户内的 Codex Usage 面板仍是最终口径。协议字段可参见 [Codex App Server 官方文档](https://developers.openai.com/codex/app-server)。
 

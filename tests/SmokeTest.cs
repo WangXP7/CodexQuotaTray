@@ -21,6 +21,8 @@ namespace CodexQuotaTray.Tests
         {
             try
             {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
                 string previewPath = args.Length > 0
                     ? Path.GetFullPath(args[0])
                     : Path.GetFullPath("popup-preview.png");
@@ -30,11 +32,13 @@ namespace CodexQuotaTray.Tests
 
                 TestAppServerPayload();
                 TestLiveAppServer();
+                TestRealtimeRecoveryWinsOverFallback();
                 TestIconHandles();
                 TestSquareIconShape();
                 TestTwoDigitReadability();
                 TestDisconnectedIconColors();
                 TestTaskMonitor();
+                TestTaskPanelExpansion();
 
                 QuotaSnapshot snapshot = SessionLogQuotaProvider.ReadLatest();
                 if (snapshot == null)
@@ -150,6 +154,26 @@ namespace CodexQuotaTray.Tests
                 (received.DisplayRemainingPercent.HasValue
                     ? received.DisplayRemainingPercent.Value.ToString()
                     : (received.IsUnlimited ? "unlimited" : "unknown")));
+        }
+
+        private static void TestRealtimeRecoveryWinsOverFallback()
+        {
+            DateTime now = DateTime.UtcNow;
+            if (QuotaMonitor.ShouldEmitFallbackSnapshot(
+                true, now.AddSeconds(-1), now))
+            {
+                throw new InvalidOperationException(
+                    "A fresh realtime snapshot was overridden by fallback data.");
+            }
+
+            if (!QuotaMonitor.ShouldEmitFallbackSnapshot(
+                false, now.AddSeconds(-1), now))
+            {
+                throw new InvalidOperationException(
+                    "A newer fallback snapshot was rejected while realtime data was unavailable.");
+            }
+
+            Console.WriteLine("REALTIME_RECOVERY_COLOR=ok");
         }
 
         private static void TestSquareIconShape()
@@ -322,6 +346,49 @@ namespace CodexQuotaTray.Tests
             }
         }
 
+        private static void TestTaskPanelExpansion()
+        {
+            using (QuotaPopupForm form = new QuotaPopupForm())
+            {
+                List<CodexTaskInfo> tasks = new List<CodexTaskInfo>();
+                for (int index = 0; index < 3; index++)
+                {
+                    tasks.Add(new CodexTaskInfo
+                    {
+                        Id = "panel-test-" + index.ToString(),
+                        Name = "Task " + index.ToString(),
+                        Detail = "Running",
+                        StartedAtUtc = DateTime.UtcNow.AddMinutes(-1),
+                        EstimatedProgressPercent = 50,
+                        EstimatedRemaining = TimeSpan.FromMinutes(1)
+                    });
+                }
+
+                form.UpdateTasks(tasks);
+                FlowLayoutPanel taskPanel = null;
+                foreach (Control control in form.Controls)
+                {
+                    FlowLayoutPanel candidate = control as FlowLayoutPanel;
+                    if (candidate != null)
+                    {
+                        taskPanel = candidate;
+                        break;
+                    }
+                }
+
+                if (taskPanel == null ||
+                    taskPanel.AutoScroll ||
+                    taskPanel.Controls.Count != 3 ||
+                    form.ClientSize.Height <= 520)
+                {
+                    throw new InvalidOperationException(
+                        "Task area did not expand cleanly without a scrollbar.");
+                }
+            }
+
+            Console.WriteLine("TASK_PANEL_NO_SCROLL=ok");
+        }
+
         private static void RenderIconPreview(string outputPath)
         {
             int?[] values = new int?[] { 11, 42, 88, 99 };
@@ -362,8 +429,6 @@ namespace CodexQuotaTray.Tests
 
         private static void RenderPopup(QuotaSnapshot snapshot, string outputPath)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
             string directory = Path.GetDirectoryName(outputPath);
             if (!String.IsNullOrEmpty(directory))
             {
@@ -371,7 +436,6 @@ namespace CodexQuotaTray.Tests
             }
 
             using (QuotaPopupForm form = new QuotaPopupForm())
-            using (Bitmap bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
             {
                 form.UpdateSnapshot(snapshot);
                 form.UpdateTasks(new List<CodexTaskInfo>
@@ -393,15 +457,28 @@ namespace CodexQuotaTray.Tests
                         StartedAtUtc = DateTime.UtcNow.AddMinutes(-1).AddSeconds(-12),
                         EstimatedProgressPercent = 28,
                         EstimatedRemaining = TimeSpan.FromMinutes(3).Add(TimeSpan.FromSeconds(5))
+                    },
+                    new CodexTaskInfo
+                    {
+                        Id = "task-preview-3",
+                        Name = "验证断线恢复后的图标颜色",
+                        Detail = "确保实时数据恢复后数字自动变回白色",
+                        StartedAtUtc = DateTime.UtcNow.AddSeconds(-44),
+                        EstimatedProgressPercent = 76,
+                        EstimatedRemaining = TimeSpan.FromSeconds(18)
                     }
                 });
-                form.StartPosition = FormStartPosition.Manual;
-                form.Location = new Point(-10000, -10000);
-                form.Show();
-                Application.DoEvents();
-                form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.ClientSize));
-                bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
-                form.Hide();
+
+                using (Bitmap bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
+                {
+                    form.StartPosition = FormStartPosition.Manual;
+                    form.Location = new Point(-10000, -10000);
+                    form.Show();
+                    Application.DoEvents();
+                    form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.ClientSize));
+                    bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+                    form.Hide();
+                }
             }
         }
 
