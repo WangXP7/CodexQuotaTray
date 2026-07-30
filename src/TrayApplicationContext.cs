@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -19,6 +20,7 @@ namespace CodexQuotaTray
         private readonly ToolStripMenuItem _autoStartItem;
         private readonly QuotaPopupForm _popup;
         private readonly QuotaMonitor _monitor;
+        private readonly CodexTaskMonitor _taskMonitor;
         private readonly Timer _freshnessTimer;
         private Icon _currentIcon;
         private QuotaSnapshot _lastSnapshot;
@@ -121,6 +123,10 @@ namespace CodexQuotaTray
             _monitor.StatusChanged += OnStatusChanged;
             _monitor.Start();
 
+            _taskMonitor = new CodexTaskMonitor();
+            _taskMonitor.TasksChanged += OnTasksChanged;
+            _taskMonitor.Start();
+
             _freshnessTimer = new Timer();
             _freshnessTimer.Interval = 60000;
             _freshnessTimer.Tick += delegate { RefreshFreshnessPresentation(); };
@@ -148,6 +154,11 @@ namespace CodexQuotaTray
                     _notifyIcon.Text = BuildTooltip(_lastSnapshot);
                 }
             });
+        }
+
+        private void OnTasksChanged(IList<CodexTaskInfo> tasks)
+        {
+            RunOnUi(delegate { _popup.UpdateTasks(tasks); });
         }
 
         private void ApplySnapshot(QuotaSnapshot snapshot)
@@ -404,6 +415,7 @@ namespace CodexQuotaTray
         {
             MessageBox.Show(
                 "优先通过 Codex App Server 读取账户的 rateLimits；连接不可用时，只读取本机 Codex 会话中的额度缓存。\r\n\r\n" +
+                "任务区域读取本机 Codex 会话中的任务生命周期和公开执行事件；进度与剩余时间为动态估算，不是 Codex 服务端承诺。\r\n\r\n" +
                 "本工具不会读取、复制或保存 auth.json 中的登录令牌。托盘数字是 100 - usedPercent，并取多个额度窗口中的较低值。",
                 "Codex 额度 · 数据来源",
                 MessageBoxButtons.OK,
@@ -455,6 +467,7 @@ namespace CodexQuotaTray
                 _freshnessTimer.Dispose();
                 _notifyIcon.Visible = false;
                 _monitor.Dispose();
+                _taskMonitor.Dispose();
                 _popup.Close();
                 _notifyIcon.Dispose();
                 _menu.Dispose();

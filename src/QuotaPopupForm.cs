@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -27,6 +28,9 @@ namespace CodexQuotaTray
         private readonly Label _extraTitle;
         private readonly Label _extraValue;
         private readonly Label _footer;
+        private readonly Label _tasksTitle;
+        private readonly Label _tasksCount;
+        private readonly FlowLayoutPanel _tasksPanel;
         private QuotaSnapshot _snapshot;
         private DateTime _ignoreDeactivateUntilUtc;
 
@@ -42,10 +46,11 @@ namespace CodexQuotaTray
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
             Text = "Codex 额度";
-            ClientSize = new Size(366, 254);
+            ClientSize = new Size(366, 520);
             MinimumSize = ClientSize;
             MaximumSize = ClientSize;
             KeyPreview = true;
+            DoubleBuffered = true;
 
             _title = MakeLabel("Codex 额度", 18, 14, 180, 24, 12f, FontStyle.Bold, Color.White);
             _plan = MakeLabel("", 228, 17, 120, 21, 9f, FontStyle.Regular, Color.FromArgb(148, 159, 173));
@@ -61,14 +66,27 @@ namespace CodexQuotaTray
             _extraValue = MakeLabel("—", 106, 182, 242, 24, 10f, FontStyle.Regular, Color.FromArgb(232, 235, 240));
             _extraValue.AutoEllipsis = true;
             _footer = MakeLabel("等待数据", 18, 220, 330, 20, 8.5f, FontStyle.Regular, Color.FromArgb(120, 132, 148));
+            _tasksTitle = MakeLabel("正在执行的任务", 18, 258, 190, 22, 10f, FontStyle.Bold, Color.White);
+            _tasksCount = MakeLabel("0 个", 224, 258, 124, 22, 8.5f, FontStyle.Regular, Color.FromArgb(139, 150, 165));
+            _tasksCount.TextAlign = ContentAlignment.MiddleRight;
+
+            _tasksPanel = new BufferedFlowLayoutPanel();
+            _tasksPanel.Location = new Point(14, 286);
+            _tasksPanel.Size = new Size(338, 216);
+            _tasksPanel.AutoScroll = true;
+            _tasksPanel.WrapContents = false;
+            _tasksPanel.FlowDirection = FlowDirection.TopDown;
+            _tasksPanel.BackColor = Color.FromArgb(31, 35, 41);
+            _tasksPanel.Padding = new Padding(4);
 
             Controls.AddRange(new Control[]
             {
                 _title, _plan, _percent, _caption,
                 _primaryTitle, _primaryValue,
-                _secondaryTitle, _secondaryValue,
-                _extraTitle, _extraValue, _footer
+                _secondaryTitle, _secondaryValue, _extraTitle, _extraValue,
+                _footer, _tasksTitle, _tasksCount, _tasksPanel
             });
+            UpdateTasks(new List<CodexTaskInfo>());
 
             _title.MouseDown += BeginDrag;
             MouseDown += BeginDrag;
@@ -169,6 +187,43 @@ namespace CodexQuotaTray
             Invalidate();
         }
 
+        public void UpdateTasks(IList<CodexTaskInfo> tasks)
+        {
+            _tasksPanel.SuspendLayout();
+            while (_tasksPanel.Controls.Count > 0)
+            {
+                Control control = _tasksPanel.Controls[0];
+                _tasksPanel.Controls.RemoveAt(0);
+                control.Dispose();
+            }
+
+            int count = tasks == null ? 0 : tasks.Count;
+            _tasksCount.Text = count <= 1
+                ? count.ToString() + " 个"
+                : count.ToString() + " 个并行";
+
+            if (count == 0)
+            {
+                Label empty = MakeLabel(
+                    "当前没有正在执行的任务",
+                    0, 0, 310, 196, 9f, FontStyle.Regular,
+                    Color.FromArgb(120, 132, 148));
+                empty.TextAlign = ContentAlignment.MiddleCenter;
+                empty.Margin = new Padding(0);
+                _tasksPanel.Controls.Add(empty);
+            }
+            else
+            {
+                DateTime now = DateTime.UtcNow;
+                foreach (CodexTaskInfo task in tasks)
+                {
+                    _tasksPanel.Controls.Add(CreateTaskRow(task, now));
+                }
+            }
+
+            _tasksPanel.ResumeLayout();
+        }
+
         public void ShowNearTaskbar()
         {
             _ignoreDeactivateUntilUtc = DateTime.UtcNow.AddSeconds(1);
@@ -196,7 +251,70 @@ namespace CodexQuotaTray
                 args.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
                 args.Graphics.DrawLine(separator, 18, 110, Width - 18, 110);
                 args.Graphics.DrawLine(separator, 18, 213, Width - 18, 213);
+                args.Graphics.DrawLine(separator, 18, 249, Width - 18, 249);
             }
+        }
+
+        private static Control CreateTaskRow(CodexTaskInfo task, DateTime now)
+        {
+            Panel row = new Panel();
+            row.Size = new Size(314, 96);
+            row.Margin = new Padding(0, 0, 0, 8);
+            row.BackColor = Color.FromArgb(39, 44, 51);
+
+            Label name = MakeLabel(
+                String.IsNullOrEmpty(task.Name) ? "Codex 任务" : task.Name,
+                10, 5, 294, 21, 9.5f, FontStyle.Bold, Color.White);
+            name.AutoEllipsis = true;
+
+            Label detail = MakeLabel(
+                String.IsNullOrEmpty(task.Detail) ? "正在执行" : task.Detail,
+                10, 26, 294, 34, 8.5f, FontStyle.Regular,
+                Color.FromArgb(180, 188, 199));
+            detail.AutoEllipsis = true;
+
+            Panel progressTrack = new Panel();
+            progressTrack.Location = new Point(10, 65);
+            progressTrack.Size = new Size(294, 5);
+            progressTrack.BackColor = Color.FromArgb(67, 74, 86);
+
+            Panel progressFill = new Panel();
+            progressFill.Location = Point.Empty;
+            progressFill.Size = new Size(
+                Math.Max(2, (int)Math.Round(294 * Math.Max(0, Math.Min(100, task.EstimatedProgressPercent)) / 100d)),
+                5);
+            progressFill.BackColor = Color.FromArgb(31, 154, 112);
+            progressTrack.Controls.Add(progressFill);
+
+            TimeSpan elapsed = now > task.StartedAtUtc
+                ? now - task.StartedAtUtc
+                : TimeSpan.Zero;
+            Label timing = MakeLabel(
+                "已执行 " + FormatDuration(elapsed) +
+                " · 估算 " + task.EstimatedProgressPercent.ToString() + "%" +
+                " · 预计还需 " + FormatDuration(task.EstimatedRemaining),
+                10, 73, 294, 18, 8f, FontStyle.Regular,
+                Color.FromArgb(145, 158, 174));
+
+            row.Controls.AddRange(new Control[] { name, detail, progressTrack, timing });
+            return row;
+        }
+
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalHours >= 1)
+            {
+                return ((int)duration.TotalHours).ToString() + "时" +
+                    duration.Minutes.ToString() + "分";
+            }
+
+            if (duration.TotalMinutes >= 1)
+            {
+                return ((int)duration.TotalMinutes).ToString() + "分" +
+                    duration.Seconds.ToString() + "秒";
+            }
+
+            return Math.Max(0, duration.Seconds).ToString() + "秒";
         }
 
         private static Label MakeLabel(
@@ -275,6 +393,15 @@ namespace CodexQuotaTray
             {
                 ReleaseCapture();
                 SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+        }
+
+        private sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
+        {
+            public BufferedFlowLayoutPanel()
+            {
+                DoubleBuffered = true;
+                ResizeRedraw = true;
             }
         }
     }

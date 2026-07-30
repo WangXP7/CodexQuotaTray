@@ -33,6 +33,7 @@ namespace CodexQuotaTray.Tests
                 TestIconHandles();
                 TestSquareIconShape();
                 TestTwoDigitReadability();
+                TestTaskMonitor();
 
                 QuotaSnapshot snapshot = SessionLogQuotaProvider.ReadLatest();
                 if (snapshot == null)
@@ -212,6 +213,74 @@ namespace CodexQuotaTray.Tests
             Console.WriteLine("ICON_TWO_DIGIT_READABILITY=ok");
         }
 
+        private static void TestTaskMonitor()
+        {
+            string originalCodexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+            string testHome = Path.Combine(
+                Path.GetTempPath(),
+                "CodexQuotaTray-" + Guid.NewGuid().ToString("N"));
+            string sessionDirectory = Path.Combine(testHome, "sessions", "2026", "07", "30");
+            Directory.CreateDirectory(sessionDirectory);
+            long startedAt = DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeSeconds();
+
+            try
+            {
+                for (int index = 1; index <= 2; index++)
+                {
+                    string turnId = "parallel-" + index.ToString();
+                    string timestamp = DateTime.UtcNow.ToString("o");
+                    string log =
+                        "{\"timestamp\":\"" + timestamp + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"" +
+                        turnId + "\",\"started_at\":" + startedAt.ToString() + "}}\n" +
+                        "{\"timestamp\":\"" + timestamp + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"并行任务 " +
+                        index.ToString() + "\"}}\n" +
+                        "{\"timestamp\":\"" + timestamp + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"phase\":\"commentary\",\"message\":\"正在执行步骤 " +
+                        index.ToString() + "\"}}\n";
+                    File.WriteAllText(
+                        Path.Combine(sessionDirectory, "rollout-" + index.ToString() + ".jsonl"),
+                        log,
+                        new System.Text.UTF8Encoding(false));
+                }
+
+                Environment.SetEnvironmentVariable("CODEX_HOME", testHome);
+                IList<CodexTaskInfo> observed = null;
+                using (ManualResetEvent completed = new ManualResetEvent(false))
+                using (CodexTaskMonitor monitor = new CodexTaskMonitor())
+                {
+                    monitor.TasksChanged += delegate(IList<CodexTaskInfo> tasks)
+                    {
+                        observed = tasks;
+                        completed.Set();
+                    };
+                    monitor.Start();
+                    completed.WaitOne(15000);
+                }
+
+                if (observed == null || observed.Count != 2)
+                {
+                    throw new InvalidOperationException("Task monitor did not return two parallel tasks.");
+                }
+
+                foreach (CodexTaskInfo task in observed)
+                {
+                    if (String.IsNullOrEmpty(task.Name) ||
+                        task.EstimatedProgressPercent <= 0 ||
+                        task.EstimatedProgressPercent > 100)
+                    {
+                        throw new InvalidOperationException("Task monitor produced invalid task data.");
+                    }
+                }
+
+                Console.WriteLine("TASK_MONITOR_PARALLEL=" + observed.Count.ToString());
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("CODEX_HOME", originalCodexHome);
+                try { Directory.Delete(testHome, true); }
+                catch { }
+            }
+        }
+
         private static void RenderIconPreview(string outputPath)
         {
             int?[] values = new int?[] { 11, 42, 88, 99 };
@@ -264,6 +333,27 @@ namespace CodexQuotaTray.Tests
             using (Bitmap bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
             {
                 form.UpdateSnapshot(snapshot);
+                form.UpdateTasks(new List<CodexTaskInfo>
+                {
+                    new CodexTaskInfo
+                    {
+                        Id = "task-preview-1",
+                        Name = "增加 Codex 并行任务状态区域",
+                        Detail = "正在编译程序并检查任务卡片布局",
+                        StartedAtUtc = DateTime.UtcNow.AddMinutes(-4).AddSeconds(-18),
+                        EstimatedProgressPercent = 62,
+                        EstimatedRemaining = TimeSpan.FromMinutes(2).Add(TimeSpan.FromSeconds(38))
+                    },
+                    new CodexTaskInfo
+                    {
+                        Id = "task-preview-2",
+                        Name = "后台测试额度数据刷新",
+                        Detail = "正在运行测试",
+                        StartedAtUtc = DateTime.UtcNow.AddMinutes(-1).AddSeconds(-12),
+                        EstimatedProgressPercent = 28,
+                        EstimatedRemaining = TimeSpan.FromMinutes(3).Add(TimeSpan.FromSeconds(5))
+                    }
+                });
                 form.StartPosition = FormStartPosition.Manual;
                 form.Location = new Point(-10000, -10000);
                 form.Show();
