@@ -284,7 +284,13 @@ namespace CodexQuotaTray.Tests
             string testHome = Path.Combine(
                 Path.GetTempPath(),
                 "CodexQuotaTray-" + Guid.NewGuid().ToString("N"));
-            string sessionDirectory = Path.Combine(testHome, "sessions", "2026", "07", "30");
+            DateTime sessionDate = DateTime.Now;
+            string sessionDirectory = Path.Combine(
+                testHome,
+                "sessions",
+                sessionDate.Year.ToString("D4"),
+                sessionDate.Month.ToString("D2"),
+                sessionDate.Day.ToString("D2"));
             Directory.CreateDirectory(sessionDirectory);
             long startedAt = DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeSeconds();
 
@@ -301,10 +307,14 @@ namespace CodexQuotaTray.Tests
                         index.ToString() + "\"}}\n" +
                         "{\"timestamp\":\"" + timestamp + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"phase\":\"commentary\",\"message\":\"正在执行步骤 " +
                         index.ToString() + "\"}}\n";
+                    string logPath = Path.Combine(
+                        sessionDirectory,
+                        "rollout-" + index.ToString() + ".jsonl");
                     File.WriteAllText(
-                        Path.Combine(sessionDirectory, "rollout-" + index.ToString() + ".jsonl"),
+                        logPath,
                         log,
                         new System.Text.UTF8Encoding(false));
+                    File.SetLastWriteTimeUtc(logPath, DateTime.UtcNow.AddHours(-2));
                 }
 
                 Environment.SetEnvironmentVariable("CODEX_HOME", testHome);
@@ -337,6 +347,7 @@ namespace CodexQuotaTray.Tests
                 }
 
                 Console.WriteLine("TASK_MONITOR_PARALLEL=" + observed.Count.ToString());
+                Console.WriteLine("TASK_MONITOR_STALE_MTIME=ok");
             }
             finally
             {

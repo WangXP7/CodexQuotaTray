@@ -28,6 +28,8 @@ namespace CodexQuotaTray
 
         private readonly Dictionary<string, CachedLog> _cache =
             new Dictionary<string, CachedLog>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, long> _observedLengths =
+            new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         private Timer _timer;
         private int _scanRunning;
         private volatile bool _disposed;
@@ -110,9 +112,7 @@ namespace CodexQuotaTray
 
             foreach (string path in _cache.Keys.ToList())
             {
-                CachedLog cached = _cache[path];
-                if (!visiblePaths.Contains(path) ||
-                    now - cached.LastWriteTimeUtc > ActiveFileAge)
+                if (!visiblePaths.Contains(path))
                 {
                     _cache.Remove(path);
                 }
@@ -121,7 +121,8 @@ namespace CodexQuotaTray
             List<CodexTaskInfo> tasks = new List<CodexTaskInfo>();
             foreach (CachedLog cached in _cache.Values)
             {
-                if (cached.ActiveTask == null || now - cached.LastWriteTimeUtc > ActiveFileAge)
+                if (cached.ActiveTask == null ||
+                    now - cached.ActiveTask.UpdatedAtUtc > ActiveFileAge)
                 {
                     continue;
                 }
@@ -158,11 +159,51 @@ namespace CodexQuotaTray
             try
             {
                 DateTime cutoff = DateTime.UtcNow - ActiveFileAge;
-                return Directory
+                DateTime localToday = DateTime.Now.Date;
+                List<FileInfo> allFiles = Directory
                     .EnumerateFiles(sessionsRoot, "*.jsonl", SearchOption.AllDirectories)
                     .Select(delegate(string path) { return new FileInfo(path); })
-                    .Where(delegate(FileInfo file) { return file.LastWriteTimeUtc >= cutoff; })
-                    .OrderByDescending(delegate(FileInfo file) { return file.LastWriteTimeUtc; })
+                    .ToList();
+                HashSet<string> currentPaths = new HashSet<string>(
+                    allFiles.Select(delegate(FileInfo file) { return file.FullName; }),
+                    StringComparer.OrdinalIgnoreCase);
+                HashSet<string> changedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (FileInfo file in allFiles)
+                {
+                    long previousLength;
+                    if (_observedLengths.TryGetValue(file.FullName, out previousLength) &&
+                        previousLength != file.Length)
+                    {
+                        changedPaths.Add(file.FullName);
+                    }
+
+                    _observedLengths[file.FullName] = file.Length;
+                }
+
+                foreach (string path in _observedLengths.Keys.ToList())
+                {
+                    if (!currentPaths.Contains(path))
+                    {
+                        _observedLengths.Remove(path);
+                    }
+                }
+
+                return allFiles
+                    .Where(delegate(FileInfo file)
+                    {
+                        CachedLog cached;
+                        bool trackedActive = _cache.TryGetValue(file.FullName, out cached) &&
+                            cached.ActiveTask != null &&
+                            DateTime.UtcNow - cached.ActiveTask.UpdatedAtUtc <= ActiveFileAge;
+                        return file.LastWriteTimeUtc >= cutoff ||
+                            IsRecentSessionDay(file, localToday) ||
+                            changedPaths.Contains(file.FullName) ||
+                            trackedActive;
+                    })
+                    .OrderByDescending(delegate(FileInfo file) { return changedPaths.Contains(file.FullName); })
+                    .ThenByDescending(delegate(FileInfo file) { return IsRecentSessionDay(file, localToday); })
+                    .ThenByDescending(delegate(FileInfo file) { return file.LastWriteTimeUtc; })
                     .Take(MaximumFiles)
                     .ToList();
             }
@@ -170,6 +211,25 @@ namespace CodexQuotaTray
             {
                 return new List<FileInfo>();
             }
+        }
+
+        private static bool IsRecentSessionDay(FileInfo file, DateTime localToday)
+        {
+            string directory = file.DirectoryName ?? String.Empty;
+            for (int daysAgo = 0; daysAgo <= 1; daysAgo++)
+            {
+                DateTime date = localToday.AddDays(-daysAgo);
+                string suffix = Path.Combine(
+                    date.Year.ToString("D4"),
+                    date.Month.ToString("D2"),
+                    date.Day.ToString("D2"));
+                if (directory.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static ParseResult ParseLog(FileInfo file, long previousLength)
